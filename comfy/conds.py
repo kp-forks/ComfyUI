@@ -1,4 +1,3 @@
-import enum
 import torch
 import math
 import comfy.utils
@@ -30,7 +29,12 @@ class CONDRegular:
 
 class CONDNoiseShape(CONDRegular):
     def process_cond(self, batch_size, device, area, **kwargs):
-        data = self.cond[:,:,area[2]:area[0] + area[2],area[3]:area[1] + area[3]]
+        data = self.cond
+        if area is not None:
+            dims = len(area) // 2
+            for i in range(dims):
+                data = data.narrow(i + 2, area[i + dims], area[i])
+
         return self._copy_with(comfy.utils.repeat_to_batch_size(data, batch_size).to(device))
 
 
@@ -62,3 +66,18 @@ class CONDCrossAttn(CONDRegular):
                 c = c.repeat(1, crossattn_max_len // c.shape[1], 1) #padding with repeat doesn't change result
             out.append(c)
         return torch.cat(out)
+
+class CONDConstant(CONDRegular):
+    def __init__(self, cond):
+        self.cond = cond
+
+    def process_cond(self, batch_size, device, **kwargs):
+        return self._copy_with(self.cond)
+
+    def can_concat(self, other):
+        if self.cond != other.cond:
+            return False
+        return True
+
+    def concat(self, others):
+        return self.cond
